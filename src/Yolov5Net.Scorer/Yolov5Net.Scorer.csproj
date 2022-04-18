@@ -5,7 +5,7 @@
         <AssemblyVersion>1.0.9.0</AssemblyVersion>
         <FileVersion>1.0.9.0</FileVersion>
         <TargetFramework>netstandard2.0</TargetFramework>
-        <PackageId>Yolov5Net</PackageId>
+        <PackageId>Yolov5VanillaNet</PackageId>
         <Description>YOLOv5 object detection with C#, ML.NET, ONNX.</Description>
         <PackageLicenseExpression>MIT</PackageLicenseExpression>
         <PackageTags>c-sharp machine-learning object-detection yolo yolov5 ml-net onnx</PackageTags>
@@ -14,7 +14,7 @@
         <NeutralLanguage>en</NeutralLanguage>
         <Copyright>© Mentalstack 2016-2021</Copyright>
         <Authors>Mentalstack</Authors>
-        <Version>1.0.9</Version>
+        <Version>1.0.0</Version>
     </PropertyGroup>
 
     <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
@@ -31,8 +31,8 @@
     </ItemGroup>
 
     <ItemGroup>
+        <PackageReference Include="Microsoft.Maui.Graphics.Skia" Version="6.0.300-rc.1.1215" />
         <PackageReference Include="Microsoft.ML.OnnxRuntime.Managed" Version="1.9.0" />
-        <PackageReference Include="System.Drawing.Common" Version="5.0.2" />
     </ItemGroup>
 
 </Project>

@@ -1,4 +1,5 @@
-﻿using System.Drawing;
+﻿using Microsoft.Maui.Graphics;
+using System.Drawing;
 
 namespace Yolov5Net.Scorer
 {
@@ -8,7 +9,7 @@ namespace Yolov5Net.Scorer
     public class YoloPrediction
     {
         public YoloLabel Label { get; set; }
-        public RectangleF Rectangle { get; set; }
+        public RectF Rectangle { get; set; }
         public float Score { get; set; }
 
         public YoloPrediction() { }

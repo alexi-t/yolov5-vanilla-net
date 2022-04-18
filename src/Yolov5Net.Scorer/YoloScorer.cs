@@ -1,11 +1,11 @@
-﻿using Microsoft.ML.OnnxRuntime;
+﻿using Microsoft.Maui.Graphics;
+using Microsoft.Maui.Graphics.Platform;
+using Microsoft.Maui.Graphics.Skia;
+using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Drawing;
-using System.Drawing.Drawing2D;
-using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
@@ -57,62 +57,54 @@ namespace Yolov5Net.Scorer
         /// <summary>
         /// Resizes image keeping ratio to fit model input size.
         /// </summary>
-        private Bitmap ResizeImage(Image image)
+        private IImage ResizeImage(IImage image)
         {
-            PixelFormat format = image.PixelFormat;
-
-            var output = new Bitmap(_model.Width, _model.Height, format);
+            BitmapExportContext bmpContext = new PlatformBitmapExportService().CreateContext(_model.Width, _model.Height);
+            var canvas = bmpContext.Canvas;
 
             var (w, h) = (image.Width, image.Height); // image width and height
             var (xRatio, yRatio) = (_model.Width / (float)w, _model.Height / (float)h); // x, y ratios
             var ratio = Math.Min(xRatio, yRatio); // ratio = resized / original
             var (width, height) = ((int)(w * ratio), (int)(h * ratio)); // roi width and height
             var (x, y) = ((_model.Width / 2) - (width / 2), (_model.Height / 2) - (height / 2)); // roi x and y coordinates
-            var roi = new Rectangle(x, y, width, height); // region of interest
 
-            using (var graphics = Graphics.FromImage(output))
-            {
-                graphics.Clear(Color.FromArgb(0, 0, 0, 0)); // clear canvas
+            //output.Clear(Color.FromArgb(0, 0, 0, 0)); // clear canvas
 
-                graphics.SmoothingMode = SmoothingMode.None; // no smoothing
-                graphics.InterpolationMode = InterpolationMode.Bilinear; // bilinear interpolation
-                graphics.PixelOffsetMode = PixelOffsetMode.Half; // half pixel offset
+            //output.SmoothingMode = SmoothingMode.None; // no smoothing
+            //output.InterpolationMode = InterpolationMode.Bilinear; // bilinear interpolation
+            //output.PixelOffsetMode = PixelOffsetMode.Half; // half pixel offset
+            canvas.Antialias = false;
+            canvas.FillColor = Color.FromRgba(0, 0, 0, 0);
+            canvas.DrawImage(image, x, y, width, height); // draw scaled
 
-                graphics.DrawImage(image, roi); // draw scaled
-            }
-
-            return output;
+            return bmpContext.Image;
         }
 
         /// <summary>
         /// Extracts pixels into tensor for net input.
         /// </summary>
-        private Tensor<float> ExtractPixels(Image image)
+        private Tensor<float> ExtractPixels(IImage image)
         {
-            var bitmap = (Bitmap)image;
+            var bitmap = ((SkiaImage)image).PlatformRepresentation;
 
-            var rectangle = new Rectangle(0, 0, bitmap.Width, bitmap.Height);
-            BitmapData bitmapData = bitmap.LockBits(rectangle, ImageLockMode.ReadOnly, bitmap.PixelFormat);
-            int bytesPerPixel = Image.GetPixelFormatSize(bitmap.PixelFormat) / 8;
+            var bytes = bitmap.Bytes;
+
+            int bytesPerPixel = bitmap.BytesPerPixel;
 
             var tensor = new DenseTensor<float>(new[] { 1, 3, _model.Height, _model.Width });
 
-            unsafe // speed up conversion by direct work with memory
+            Parallel.For(0, (int)image.Height, (y) =>
             {
-                Parallel.For(0, bitmapData.Height, (y) =>
+                var offset = y * bitmap.RowBytes;
+
+                Parallel.For(0, (int)image.Width, (x) =>
                 {
-                    byte* row = (byte*)bitmapData.Scan0 + (y * bitmapData.Stride);
-
-                    Parallel.For(0, bitmapData.Width, (x) =>
-                    {
-                        tensor[0, 0, y, x] = row[x * bytesPerPixel + 2] / 255.0F; // r
-                        tensor[0, 1, y, x] = row[x * bytesPerPixel + 1] / 255.0F; // g
-                        tensor[0, 2, y, x] = row[x * bytesPerPixel + 0] / 255.0F; // b
-                    });
+                    tensor[0, 0, y, x] = bytes[offset + x * bytesPerPixel + 2] / 255.0F; // r
+                    tensor[0, 1, y, x] = bytes[offset + x * bytesPerPixel + 1] / 255.0F; // g
+                    tensor[0, 2, y, x] = bytes[offset + x * bytesPerPixel + 0] / 255.0F; // b
                 });
+            });
 
-                bitmap.UnlockBits(bitmapData);
-            }
 
             return tensor;
         }
@@ -120,9 +112,9 @@ namespace Yolov5Net.Scorer
         /// <summary>
         /// Runs inference session.
         /// </summary>
-        private DenseTensor<float>[] Inference(Image image)
+        private DenseTensor<float>[] Inference(IImage image)
         {
-            Bitmap resized = null;
+            IImage resized = null;
 
             if (image.Width != _model.Width || image.Height != _model.Height)
             {
@@ -149,7 +141,7 @@ namespace Yolov5Net.Scorer
         /// <summary>
         /// Parses net output (detect) to predictions.
         /// </summary>
-        private List<YoloPrediction> ParseDetect(DenseTensor<float> output, Image image)
+        private List<YoloPrediction> ParseDetect(DenseTensor<float> output, IImage image)
         {
             var result = new ConcurrentBag<YoloPrediction>();
 
@@ -186,7 +178,7 @@ namespace Yolov5Net.Scorer
 
                     var prediction = new YoloPrediction(label, output[0, i, k])
                     {
-                        Rectangle = new RectangleF(xMin, yMin, xMax - xMin, yMax - yMin)
+                        Rectangle = new RectF(xMin, yMin, xMax - xMin, yMax - yMin)
                     };
 
                     result.Add(prediction);
@@ -199,7 +191,7 @@ namespace Yolov5Net.Scorer
         /// <summary>
         /// Parses net outputs (sigmoid) to predictions.
         /// </summary>
-        private List<YoloPrediction> ParseSigmoid(DenseTensor<float>[] output, Image image)
+        private List<YoloPrediction> ParseSigmoid(DenseTensor<float>[] output, IImage image)
         {
             var result = new ConcurrentBag<YoloPrediction>();
 
@@ -248,7 +240,7 @@ namespace Yolov5Net.Scorer
 
                             var prediction = new YoloPrediction(label, mulConfidence)
                             {
-                                Rectangle = new RectangleF(xMin, yMin, xMax - xMin, yMax - yMin)
+                                Rectangle = new RectF(xMin, yMin, xMax - xMin, yMax - yMin)
                             };
 
                             result.Add(prediction);
@@ -263,7 +255,7 @@ namespace Yolov5Net.Scorer
         /// <summary>
         /// Parses net outputs (sigmoid or detect layer) to predictions.
         /// </summary>
-        private List<YoloPrediction> ParseOutput(DenseTensor<float>[] output, Image image)
+        private List<YoloPrediction> ParseOutput(DenseTensor<float>[] output, IImage image)
         {
             return _model.UseDetect ? ParseDetect(output[0], image) : ParseSigmoid(output, image);
         }
@@ -283,10 +275,10 @@ namespace Yolov5Net.Scorer
 
                     var (rect1, rect2) = (item.Rectangle, current.Rectangle);
 
-                    RectangleF intersection = RectangleF.Intersect(rect1, rect2);
+                    RectF intersection = RectF.Intersect(rect1, rect2);
 
-                    float intArea = intersection.Area(); // intersection area
-                    float unionArea = rect1.Area() + rect2.Area() - intArea; // union area
+                    float intArea = intersection.Width * intersection.Height; // intersection area
+                    float unionArea = rect1.Width * rect1.Height + rect2.Width * rect2.Height - intArea; // union area
                     float overlap = intArea / unionArea; // overlap ratio
 
                     if (overlap >= _model.Overlap)
@@ -305,7 +297,7 @@ namespace Yolov5Net.Scorer
         /// <summary>
         /// Runs object detection.
         /// </summary>
-        public List<YoloPrediction> Predict(Image image)
+        public List<YoloPrediction> Predict(IImage image)
         {
             return Supress(ParseOutput(Inference(image), image));
         }

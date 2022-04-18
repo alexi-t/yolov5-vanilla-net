@@ -1,4 +1,4 @@
-﻿using System.Drawing;
+﻿using Microsoft.Maui.Graphics;
 
 namespace Yolov5Net.Scorer
 {
@@ -14,7 +14,7 @@ namespace Yolov5Net.Scorer
 
         public YoloLabel()
         {
-            Color = Color.Yellow;
+            Color = Colors.Yellow;
         }
     }
 }

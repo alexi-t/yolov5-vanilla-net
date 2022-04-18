@@ -6,6 +6,7 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <PackageReference Include="Microsoft.Maui.Graphics.Skia" Version="6.0.300-rc.1.1215" />
         <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.9.0" />
     </ItemGroup>
 
